@@ -1,0 +1,45 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Data and Logs (accounts/tokens/keys are runtime data — never commit)
+data/*.json
+backend/data/*.json
+logs/
+*.log
+
+# Credentials / anti-bot artifacts (NEVER commit — use the .example files instead)
+bx_pool.json
+.env.bxheaders
+browser_cookies.json
+refresh_cookies.py
+*.har
+*.bak
+*.bak-*
+*.bak2
+*_challenge.html
+waf_*.js
+diag_*.html
+chat_verify*.json
+run_*.log
+
+# Env (copy .env.example → .env and fill your own values)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.sw?

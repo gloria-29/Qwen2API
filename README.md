@@ -416,7 +416,7 @@ docker login
 #### 步骤
 
 ```bash
-git clone https://github.com/YuJunZhiXue/qwen2API.git
+git clone https://github.com/yelihua77-source/qwen2API.git
 cd qwen2API
 python start.py
 ```
@@ -428,6 +428,37 @@ python start.py
 3. 安装前端依赖
 4. 构建前端
 5. 启动后端服务
+
+---
+
+## 配置 bx 反爬签名（重要，否则对话会返回空内容）
+
+Qwen 上游对 `chat/completions` 请求要求带浏览器风控签名（`bx-ua` / `bx-umidtoken` / `bx-v`）。
+**如果不配置，账号即使有效、也能登录，对话也会返回空内容**（日志出现 `Bad_Request` / `Internal error`，
+接口返回 `bx_blocked` 错误）。这不是账号问题，而是缺少反爬签名。
+
+### 一次性抓取 + 生成 bx_pool.json
+
+1. 用浏览器登录 https://chat.qwen.ai
+2. 按 `F12` 打开开发者工具 → 切到「网络 / Network」面板 → 勾选「保留日志 / Preserve log」
+3. 在网页里随便发一条消息（任意内容）
+4. 在网络面板里找到 `chat/completions` 请求 → 右键 →「保存所有为 HAR / Save all as HAR」
+5. 运行脚本从 HAR 提取签名并写入 `bx_pool.json`：
+
+```bash
+python add_bx_from_har.py "C:\path\to\your.har"
+```
+
+脚本会把 `bx-ua` / `bx-umidtoken` / `bx-v` / `User-Agent` 等提取到项目根目录的 `bx_pool.json`。
+网关会在 **60 秒内自动重读**该文件（无需重启）。可多抓几次不同浏览器/时段的 HAR，
+脚本会追加成一个池子，运行时随机轮换，降低风控命中率。
+
+> 参考模板见 `bx_pool.json.example`。也可改用环境变量方式，见 `.env.bxheaders.example`。
+> `bx_pool.json` 含你个人的浏览器签名，已被 `.gitignore` 排除，**不会**、也**不应**提交到仓库。
+
+### 签名会过期
+
+`bx` 签名有时效，过一段时间后对话又开始返回空内容，重新抓一次 HAR 跑一遍脚本即可刷新。
 
 ---
 

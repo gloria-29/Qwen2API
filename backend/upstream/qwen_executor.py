@@ -146,12 +146,39 @@ class QwenExecutor:
                     while "\n\n" in buffer:
                         msg, buffer = buffer.split("\n\n", 1)
                         log.info("[上游-DEBUG] 解析 SSE 消息: %s", msg[:500])
+                        # 上游风控检测（这些内容不带 data: 前缀，parse_sse_chunk 会跳过，
+                        # 若不在此拦截会导致 0 事件的空回复）：
+                        #  - Aliyun WAF 挑战页：x5secdata / punish / window.location.replace
+                        #  - bx 反爬拒绝：{"success":false,..."Bad_Request"/"Internal error"}
+                        low = msg.lower()
+                        if ("x5secdata" in low) or ("/punish" in low) or ("window.location.replace" in low):
+                            raise Exception(
+                                "bx_blocked: 上游返回 Aliyun WAF 风控挑战页。"
+                                "通常是 bx 反爬签名缺失或过期，请更新 bx_pool.json。"
+                            )
+                        if ('"success":false' in low or '"success": false' in low) and (
+                            "bad_request" in low or "internal error" in low
+                        ):
+                            raise Exception(
+                                f"bx_blocked: 上游风控拒绝请求（success=false）。"
+                                f"通常是 bx 反爬签名缺失或过期，请更新 bx_pool.json。详情: {msg[:200]}"
+                            )
                         for evt in parse_sse_chunk(msg):
                             if not first_event_logged:
                                 first_event_logged = True
                                 log.info(
                                     f"[上游] 首个事件耗时 {(time.perf_counter() - started_at):.3f}s 会话={chat_id}"
                                 )
+                            # 上游风控/错误事件：转成明确异常，避免静默空回复
+                            if evt.get("type") == "upstream_error":
+                                code = evt.get("code", "unknown")
+                                details = evt.get("details", "")
+                                if code in ("Bad_Request",) or "internal error" in str(details).lower():
+                                    raise Exception(
+                                        f"bx_blocked: 上游风控拒绝 (code={code})。"
+                                        f"通常是 bx 反爬签名缺失或过期，请更新 bx_pool.json。详情: {details}"
+                                    )
+                                raise Exception(f"upstream_error: code={code} details={details}")
                             yield evt
         except Exception as e:
             elapsed = time.perf_counter() - started_at
@@ -164,12 +191,34 @@ class QwenExecutor:
             raise
 
         if buffer:
+            low = buffer.lower()
+            if ("x5secdata" in low) or ("/punish" in low) or ("window.location.replace" in low):
+                raise Exception(
+                    "bx_blocked: 上游返回 Aliyun WAF 风控挑战页。"
+                    "通常是 bx 反爬签名缺失或过期，请更新 bx_pool.json。"
+                )
+            if ('"success":false' in low or '"success": false' in low) and (
+                "bad_request" in low or "internal error" in low
+            ):
+                raise Exception(
+                    f"bx_blocked: 上游风控拒绝请求（success=false）。"
+                    f"通常是 bx 反爬签名缺失或过期，请更新 bx_pool.json。详情: {buffer[:200]}"
+                )
             for evt in parse_sse_chunk(buffer):
                 if not first_event_logged:
                     first_event_logged = True
                     log.info(
                         f"[上游] 首个事件耗时 {(time.perf_counter() - started_at):.3f}s 会话={chat_id}"
                     )
+                if evt.get("type") == "upstream_error":
+                    code = evt.get("code", "unknown")
+                    details = evt.get("details", "")
+                    if code in ("Bad_Request",) or "internal error" in str(details).lower():
+                        raise Exception(
+                            f"bx_blocked: 上游风控拒绝 (code={code})。"
+                            f"通常是 bx 反爬签名缺失或过期，请更新 bx_pool.json。详情: {details}"
+                        )
+                    raise Exception(f"upstream_error: code={code} details={details}")
                 yield evt
 
         elapsed = time.perf_counter() - started_at
@@ -239,7 +288,18 @@ class QwenExecutor:
                     or type(e).__name__ in ("ReadTimeout", "TimeoutError", "TimeoutException")
                 )
                 is_waf = "waf_blocked" in err_msg or "waf challenge" in err_msg or "aliyun_waf" in err_msg
+                is_bx = "bx_blocked" in err_msg
 
+                if is_bx:
+                    # bx 反爬签名缺失/过期：所有账号都会被同样拒绝，重试无意义，直接给出可操作提示
+                    log.warning(f"[上游] bx 风控拦截 账号={acc.email} 错误={e}")
+                    self.account_pool.release(acc)
+                    raise Exception(
+                        "bx_blocked: 上游风控拒绝了本次请求（返回空内容）。"
+                        "原因通常是缺少或过期的 bx 反爬签名。请按 README「配置 bx 反爬签名」章节，"
+                        "抓取 chat.qwen.ai 的 HAR 并用 add_bx_from_har.py 生成 bx_pool.json 后重试。"
+                        f"详情: {e}"
+                    )
                 if is_waf:
                     # WAF 拦截不是账号问题，是服务端风控，所有账号都会面临同样的 WAF
                     # 因此不重试，直接抛出，让调用方得到清晰错误

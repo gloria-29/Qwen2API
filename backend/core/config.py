@@ -50,6 +50,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"  # 忽略 .env 里未声明为字段的键（如 MAX_INFLIGHT 经 os.getenv 读取），避免启动报 extra_forbidden
 
 API_KEYS_FILE = DATA_DIR / "api_keys.json"
 

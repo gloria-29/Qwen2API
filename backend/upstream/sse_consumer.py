@@ -22,6 +22,22 @@ def parse_sse_chunk(chunk: str) -> list[dict]:
     parsed = []
     for evt in events:
         log.info("[SSE-DEBUG] 上游事件: keys=%s preview=%s", list(evt.keys()), str(evt)[:300])
+        # 上游风控/错误事件：{"success": false, "data": {"code": "...", "details": "..."}}
+        # 这类事件既没有 choices 也没有 content，若不识别会被静默丢弃，
+        # 导致客户端收到空回复（finish_reason=stop 但 0 字）。这里显式转成 error 事件上抛。
+        if evt.get("success") is False:
+            err_data = evt.get("data") if isinstance(evt.get("data"), dict) else {}
+            code = (err_data.get("code") or evt.get("code") or "unknown")
+            details = (err_data.get("details") or evt.get("details") or "")
+            log.warning("[SSE] 上游风控/错误事件: code=%s details=%s", code, str(details)[:200])
+            parsed.append(
+                {
+                    "type": "upstream_error",
+                    "code": code,
+                    "details": str(details)[:300],
+                }
+            )
+            continue
         if evt.get("choices"):
             choices = evt["choices"]
             if choices:

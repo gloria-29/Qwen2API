@@ -1,0 +1,12 @@
+[
+  {
+    "bx_ua": "<从 chat.qwen.ai 的 chat/completions 请求头 bx-ua 复制>",
+    "bx_umidtoken": "<请求头 bx-umidtoken>",
+    "bx_v": "<请求头 bx-v>",
+    "web_version": "0.2.57",
+    "timezone": "<请求头 Timezone，如 China Standard Time>",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "captured_at": "2026-01-01 00:00:00",
+    "note": "example - replace with your own captured values"
+  }
+]
