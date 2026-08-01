@@ -7,4 +7,5 @@ python-multipart
 tiktoken
 curl_cffi
 camoufox
+playwright
 oss2

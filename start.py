@@ -71,6 +71,44 @@ def fetch_browser():
         print(f"⚠ 浏览器内核下载异常: {e}")
 
 
+def ensure_bx_pool():
+    """确保 bx 反爬签名池非空。为空则自动跑 auto_bx.py 抓一条，
+    让朋友"填账号+token 直接可用"，无需手动抓 HAR。"""
+    import json
+    pool_path = WORKSPACE_DIR / "bx_pool.json"
+    try:
+        if pool_path.exists():
+            data = json.loads(pool_path.read_text(encoding="utf-8"))
+            if isinstance(data, list) and any(e.get("bx_ua") for e in data if isinstance(e, dict)):
+                print("✓ bx 反爬签名池已就绪，跳过自动抓取")
+                return
+    except Exception:
+        pass
+
+    print("⚡ bx 反爬签名池为空，正在自动抓取（首次约需 30-60 秒）...")
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(WORKSPACE_DIR)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    # 确保 Playwright chromium 内核就绪（auto_bx 依赖它；已装则秒过）
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            cwd=WORKSPACE_DIR, env=env, timeout=300,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+    try:
+        subprocess.run(
+            [sys.executable, "auto_bx.py"],
+            cwd=WORKSPACE_DIR, env=env, timeout=200,
+        )
+    except Exception as e:
+        print(f"⚠ 自动抓取 bx 签名异常: {e}")
+        print("  可稍后手动执行:  python auto_bx.py   （或退回 HAR 方式 add_bx_from_har.py）")
+
+
 def start_frontend() -> subprocess.Popen:
     print("⚡ [3/4] 启动前端开发服务器...")
     is_windows = os.name == "nt"
@@ -182,6 +220,7 @@ def main():
     check_python()
     install_backend_deps()
     fetch_browser()
+    ensure_bx_pool()
     backend_proc = start_backend()
     frontend_proc = start_frontend()
 

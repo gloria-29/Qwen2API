@@ -437,7 +437,27 @@ Qwen 上游对 `chat/completions` 请求要求带浏览器风控签名（`bx-ua`
 **如果不配置，账号即使有效、也能登录，对话也会返回空内容**（日志出现 `Bad_Request` / `Internal error`，
 接口返回 `bx_blocked` 错误）。这不是账号问题，而是缺少反爬签名。
 
-### 一次性抓取 + 生成 bx_pool.json
+### 方式一：自动抓取（推荐，零手动步骤）
+
+`python start.py` 启动时会**自动检查** `bx_pool.json`；若为空，会自动跑一次 `auto_bx.py`
+用无头浏览器打开 chat.qwen.ai、等页面反爬 SDK（BaXia）初始化后触发一个真实请求，
+拦截其中的 `bx-*` 签名并写入 `bx_pool.json`。**所以朋友只需填好账号 + token，直接 `python start.py` 即可用，无需任何抓包操作。**
+
+也可手动随时刷新 / 追加签名：
+
+```bash
+python auto_bx.py          # 自动抓一条并追加进池子
+python auto_bx.py --show   # 查看当前池子
+python auto_bx.py --headed # 显示浏览器窗口（调试用）
+```
+
+> 依赖 Playwright（`requirements.txt` 已含）。若首次运行提示缺内核：
+> `pip install playwright && python -m playwright install chromium`。
+> 建议多跑几次，池子里多几条签名可轮换、降低单条过期或被风控的概率。
+
+### 方式二：从 HAR 手动提取（兜底）
+
+自动抓取失败（网络受限 / 被 WAF 拦截）时可退回这个方式：
 
 1. 用浏览器登录 https://chat.qwen.ai
 2. 按 `F12` 打开开发者工具 → 切到「网络 / Network」面板 → 勾选「保留日志 / Preserve log」
@@ -458,7 +478,8 @@ python add_bx_from_har.py "C:\path\to\your.har"
 
 ### 签名会过期
 
-`bx` 签名有时效，过一段时间后对话又开始返回空内容，重新抓一次 HAR 跑一遍脚本即可刷新。
+`bx` 签名有时效，过一段时间后对话又开始返回空内容，重新跑一次 `python auto_bx.py`
+（或退回 HAR 方式）即可刷新。
 
 ---
 
